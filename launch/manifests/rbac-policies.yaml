@@ -1,0 +1,187 @@
+# --- MENTOR: RW Access to Student Namespaces ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student01
+  name: mentor-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student01
+  name: mentor-rw-student01
+subjects:
+- kind: ServiceAccount
+  name: mentor
+  namespace: mentor-system
+roleRef:
+  kind: Role
+  name: mentor-rw
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student02
+  name: mentor-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student02
+  name: mentor-rw-student02
+subjects:
+- kind: ServiceAccount
+  name: mentor
+  namespace: mentor-system
+roleRef:
+  kind: Role
+  name: mentor-rw
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student03
+  name: mentor-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student03
+  name: mentor-rw-student03
+subjects:
+- kind: ServiceAccount
+  name: mentor
+  namespace: mentor-system
+roleRef:
+  kind: Role
+  name: mentor-rw
+  apiGroup: rbac.authorization.k8s.io
+
+# --- STUDENT 01: RW Access only to own namespace ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student01
+  name: student01-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student01
+  name: student01-rw-binding
+subjects:
+- kind: ServiceAccount
+  name: student01
+  namespace: student01
+roleRef:
+  kind: Role
+  name: student01-rw
+  apiGroup: rbac.authorization.k8s.io
+
+# --- STUDENT 02: RW to own namespace + RO to student01 and default ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student02
+  name: student02-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student02
+  name: student02-rw-binding
+subjects:
+- kind: ServiceAccount
+  name: student02
+  namespace: student02
+roleRef:
+  kind: Role
+  name: student02-rw
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: student02-readonly-clusterrole
+rules:
+- apiGroups: ["", "apps", "batch"]
+  resources: ["pods", "services", "deployments", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student01
+  name: student02-ro-student01-binding
+subjects:
+- kind: ServiceAccount
+  name: student02
+  namespace: student02
+roleRef:
+  kind: ClusterRole
+  name: student02-readonly-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: default
+  name: student02-ro-default-binding
+subjects:
+- kind: ServiceAccount
+  name: student02
+  namespace: student02
+roleRef:
+  kind: ClusterRole
+  name: student02-readonly-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+
+# --- STUDENT 03: RW Access only to own namespace ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student03
+  name: student03-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student03
+  name: student03-rw-binding
+subjects:
+- kind: ServiceAccount
+  name: student03
+  namespace: student03
+roleRef:
+  kind: Role
+  name: student03-rw
+  apiGroup: rbac.authorization.k8s.io

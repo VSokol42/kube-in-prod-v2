@@ -1,0 +1,3 @@
+clusterName: "my-cluster-v1"
+kubernetesVersion: "v1.27.3"
+timeoutSeconds: 90
