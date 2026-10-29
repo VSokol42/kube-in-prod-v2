@@ -1117,3 +1117,170 @@ pod/audit-test-nginx condition met
 ```
 
 ## 3. Kyverno policy creation 
+
+1. Kyverno Mutating Policy Manifest
+
+This policy uses two rules:
+
+Student Namespaces (student*): Automatically adds person: student.
+
+Mentor Namespace (mentor-system): Automatically adds person: mentor.
+
+Other Namespaces: Because they do not match either rule, Kyverno leaves them alone, ensuring no person label is added elsewhere.
+
+*/launch/manifests/mutate-person-label.yaml*
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mutate-person-label
+  annotations:
+    policies.kyverno.io/title: Mutate Person Label by Namespace
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Adds the 'person' label to pods depending on their namespace ('student' for 
+      student namespaces, 'mentor' for mentor namespaces). Other namespaces are ignored.
+spec:
+  rules:
+    - name: add-student-person-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "student*"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              person: student
+
+    - name: add-mentor-person-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "mentor-system"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              person: mentor
+```
+
+Verification script testing across all three scenarios:
+
+Deploys a test pod in student01 and confirms it gets person=student.
+
+Deploys a test pod in mentor-system and confirms it gets person=mentor.
+
+Deploys a test pod in default and confirms it does not get the person label.
+
+Cleans up all test resources afterward
+
+*/launch/verify-kyverno-mutation.sh*
+
+```bash
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+POLICY_FILE="$SCRIPT_DIR/manifests/mutate-person-label.yaml"
+
+echo "=================================================="
+echo "🛡️ Kyverno Mutation Verification: 'person' Label"
+echo "=================================================="
+
+# 1. Apply the mutation policy
+echo "📂 Applying Kyverno Mutating ClusterPolicy..."
+kubectl apply -f "$POLICY_FILE"
+
+# Give Kyverno a moment to register the policy webhook
+sleep 2
+
+# 2. Test Student Namespace
+echo "--------------------------------------------------"
+echo "1️⃣ Testing Pod creation in student namespace ('student01')..."
+kubectl run test-pod-student --image=nginx -n student01 --restart=Never --dry-run=client -o yaml | kubectl apply -f -
+
+LABEL_STUDENT=$(kubectl get pod test-pod-student -n student01 -o jsonpath='{.metadata.labels.person}' 2>/dev/null || echo "")
+echo "   Observed label 'person' in student01: '$LABEL_STUDENT'"
+
+if [ "$LABEL_STUDENT" = "student" ]; then
+    echo "   ✓ Success: Student pod correctly labeled with 'person=student'."
+else
+    echo "   ❌ Failure: Expected 'person=student', got '$LABEL_STUDENT'."
+    exit 1
+fi
+kubectl delete pod test-pod-student -n student01 --grace-period=0 --force &>/dev/null
+
+# 3. Test Mentor Namespace
+echo "--------------------------------------------------"
+echo "2️⃣ Testing Pod creation in mentor namespace ('mentor-system')..."
+kubectl run test-pod-mentor --image=nginx -n mentor-system --restart=Never --dry-run=client -o yaml | kubectl apply -f -
+
+LABEL_MENTOR=$(kubectl get pod test-pod-mentor -n mentor-system -o jsonpath='{.metadata.labels.person}' 2>/dev/null || echo "")
+echo "   Observed label 'person' in mentor-system: '$LABEL_MENTOR'"
+
+if [ "$LABEL_MENTOR" = "mentor" ]; then
+    echo "   ✓ Success: Mentor pod correctly labeled with 'person=mentor'."
+else
+    echo "   ❌ Failure: Expected 'person=mentor', got '$LABEL_MENTOR'."
+    exit 1
+fi
+kubectl delete pod test-pod-mentor -n mentor-system --grace-period=0 --force &>/dev/null
+
+# 4. Test Other Namespace (default)
+echo "--------------------------------------------------"
+echo "3️⃣ Testing Pod creation in other namespace ('default')..."
+kubectl run test-pod-default --image=nginx -n default --restart=Never --dry-run=client -o yaml | kubectl apply -f -
+
+LABEL_DEFAULT=$(kubectl get pod test-pod-default -n default -o jsonpath='{.metadata.labels.person}' 2>/dev/null || echo "")
+echo "   Observed label 'person' in default: '${LABEL_DEFAULT:-<none>}'"
+
+if [ -z "$LABEL_DEFAULT" ]; then
+    echo "   ✓ Success: Default namespace pod correctly left unlabeled."
+else
+    echo "   ❌ Failure: Pod in default namespace unexpectedly received label 'person=$LABEL_DEFAULT'."
+    exit 1
+fi
+kubectl delete pod test-pod-default -n default --grace-period=0 --force &>/dev/null
+
+echo ""
+echo "=================================================="
+echo "✨ SUCCESS: All Kyverno mutation tests passed perfectly! ✨"
+echo "=================================================="
+```
+
+Output
+
+```
+==================================================
+🛡️ Kyverno Mutation Verification: 'person' Label
+==================================================
+📂 Applying Kyverno Mutating ClusterPolicy...
+clusterpolicy.kyverno.io/mutate-person-label created
+--------------------------------------------------
+1️⃣ Testing Pod creation in student namespace ('student01')...
+pod/test-pod-student created
+   Observed label 'person' in student01: 'student'
+   ✓ Success: Student pod correctly labeled with 'person=student'.
+--------------------------------------------------
+2️⃣ Testing Pod creation in mentor namespace ('mentor-system')...
+pod/test-pod-mentor created
+   Observed label 'person' in mentor-system: 'mentor'
+   ✓ Success: Mentor pod correctly labeled with 'person=mentor'.
+--------------------------------------------------
+3️⃣ Testing Pod creation in other namespace ('default')...
+pod/test-pod-default created
+   Observed label 'person' in default: '<none>'
+   ✓ Success: Default namespace pod correctly left unlabeled.
+
+==================================================
+✨ SUCCESS: All Kyverno mutation tests passed perfectly! ✨
+==================================================
+```
