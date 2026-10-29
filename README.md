@@ -284,6 +284,661 @@ my-cluster-v1-worker          Up 37 seconds
 ✨ Verification Complete: Cluster is healthy and accessible! ✨
 ```
 
+Namespaces and service accounts descibed in
+*launch/manifests/namespaces-accounts.yaml*
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mentor-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mentor
+  namespace: mentor-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: student01
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: student01
+  namespace: student01
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: student02
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: student02
+  namespace: student02
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: student03
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: student03
+  namespace: student03
+```
+
+RBAC policies
+
+*launch/manifests/rbac-policies.yaml*
+
+```yaml
+# --- MENTOR: RW Access to Student Namespaces ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student01
+  name: mentor-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student01
+  name: mentor-rw-student01
+subjects:
+- kind: ServiceAccount
+  name: mentor
+  namespace: mentor-system
+roleRef:
+  kind: Role
+  name: mentor-rw
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student02
+  name: mentor-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student02
+  name: mentor-rw-student02
+subjects:
+- kind: ServiceAccount
+  name: mentor
+  namespace: mentor-system
+roleRef:
+  kind: Role
+  name: mentor-rw
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student03
+  name: mentor-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student03
+  name: mentor-rw-student03
+subjects:
+- kind: ServiceAccount
+  name: mentor
+  namespace: mentor-system
+roleRef:
+  kind: Role
+  name: mentor-rw
+  apiGroup: rbac.authorization.k8s.io
+
+# --- STUDENT 01: RW Access only to own namespace ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student01
+  name: student01-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student01
+  name: student01-rw-binding
+subjects:
+- kind: ServiceAccount
+  name: student01
+  namespace: student01
+roleRef:
+  kind: Role
+  name: student01-rw
+  apiGroup: rbac.authorization.k8s.io
+
+# --- STUDENT 02: RW to own namespace + RO to student01 and default ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student02
+  name: student02-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student02
+  name: student02-rw-binding
+subjects:
+- kind: ServiceAccount
+  name: student02
+  namespace: student02
+roleRef:
+  kind: Role
+  name: student02-rw
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: student02-readonly-clusterrole
+rules:
+- apiGroups: ["", "apps", "batch"]
+  resources: ["pods", "services", "deployments", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student01
+  name: student02-ro-student01-binding
+subjects:
+- kind: ServiceAccount
+  name: student02
+  namespace: student02
+roleRef:
+  kind: ClusterRole
+  name: student02-readonly-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: default
+  name: student02-ro-default-binding
+subjects:
+- kind: ServiceAccount
+  name: student02
+  namespace: student02
+roleRef:
+  kind: ClusterRole
+  name: student02-readonly-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+
+# --- STUDENT 03: RW Access only to own namespace ---
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: student03
+  name: student03-rw
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: student03
+  name: student03-rw-binding
+subjects:
+- kind: ServiceAccount
+  name: student03
+  namespace: student03
+roleRef:
+  kind: Role
+  name: student03-rw
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Generate kubeconfigs adn aplly RBAC with script
+
+*launch/apply-rbac.sh*
+```bash
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SETTINGS_FILE="$SCRIPT_DIR/cluster-settings.yaml"
+MANIFESTS_DIR="$SCRIPT_DIR/manifests"
+OUTPUT_DIR="$SCRIPT_DIR/../kubeconfigs"
+mkdir -p "$OUTPUT_DIR"
+
+if ! command -v yq &> /dev/null; then
+    echo "❌ Error: 'yq' is required but not installed."
+    exit 1
+fi
+
+CLUSTER_NAME=$(yq eval '.clusterName' "$SETTINGS_FILE")
+
+echo "=================================================="
+echo "🛡️ Applying Static RBAC Manifests & Generating Kubeconfigs"
+echo "=================================================="
+
+# Apply static YAML manifests
+kubectl apply -f "$MANIFESTS_DIR/namespaces-accounts.yaml"
+kubectl apply -f "$MANIFESTS_DIR/rbac-policies.yaml"
+
+# Helper to generate isolated kubeconfig files for each user
+generate_kubeconfig() {
+    local user_name=$1
+    local user_ns=$2
+    local config_out="$OUTPUT_DIR/${user_name}-kubeconfig.yaml"
+
+    echo "🔑 Generating kubeconfig for $user_name..."
+
+    # Create static long-lived token secret for ServiceAccount
+    kubectl apply -f - <<EOF >/dev/null
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${user_name}-token
+  namespace: ${user_ns}
+  annotations:
+    kubernetes.io/service-account.name: "${user_name}"
+type: kubernetes.io/service-account-token
+EOF
+
+    local server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+    local ca_data=$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+
+    local token=""
+    for i in {1..5}; do
+        token=$(kubectl get secret "${user_name}-token" -n "${user_ns}" -o jsonpath='{.data.token}' 2>/dev/null | base64 --decode || true)
+        if [ -n "$token" ]; then break; fi
+        sleep 1
+    done
+
+    cat <<EOF > "$config_out"
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: ${ca_data}
+    server: ${server}
+  name: ${CLUSTER_NAME}
+contexts:
+- context:
+    cluster: ${CLUSTER_NAME}
+    namespace: ${user_ns}
+    user: ${user_name}
+  name: ${user_name}-context
+current-context: ${user_name}-context
+users:
+- name: ${user_name}
+  user:
+    token: ${token}
+EOF
+}
+
+# Generate kubeconfigs for mentor and all 3 students
+generate_kubeconfig "mentor" "mentor-system"
+generate_kubeconfig "student01" "student01"
+generate_kubeconfig "student02" "student02"
+generate_kubeconfig "student03" "student03"
+
+echo "✨ RBAC applied and kubeconfigs saved to 'kubeconfigs/'! ✨"
+```
+
+**./launch.aplly-rbac.sh**
+
+output
+
+```
+==================================================
+🛡️ Applying Static RBAC Manifests & Generating Kubeconfigs
+==================================================
+namespace/mentor-system created
+serviceaccount/mentor created
+namespace/student01 created
+serviceaccount/student01 created
+namespace/student02 created
+serviceaccount/student02 created
+namespace/student03 created
+serviceaccount/student03 created
+role.rbac.authorization.k8s.io/mentor-rw created
+rolebinding.rbac.authorization.k8s.io/mentor-rw-student01 created
+role.rbac.authorization.k8s.io/mentor-rw created
+rolebinding.rbac.authorization.k8s.io/mentor-rw-student02 created
+role.rbac.authorization.k8s.io/mentor-rw created
+rolebinding.rbac.authorization.k8s.io/mentor-rw-student03 created
+role.rbac.authorization.k8s.io/student01-rw created
+rolebinding.rbac.authorization.k8s.io/student01-rw-binding created
+role.rbac.authorization.k8s.io/student02-rw created
+rolebinding.rbac.authorization.k8s.io/student02-rw-binding created
+clusterrole.rbac.authorization.k8s.io/student02-readonly-clusterrole created
+rolebinding.rbac.authorization.k8s.io/student02-ro-student01-binding created
+rolebinding.rbac.authorization.k8s.io/student02-ro-default-binding created
+role.rbac.authorization.k8s.io/student03-rw created
+rolebinding.rbac.authorization.k8s.io/student03-rw-binding created
+🔑 Generating kubeconfig for mentor...
+🔑 Generating kubeconfig for student01...
+🔑 Generating kubeconfig for student02...
+🔑 Generating kubeconfig for student03...
+✨ RBAC applied and kubeconfigs saved to 'kubeconfigs/'! ✨
+```
+
+Verify RBAC
+
+*launch/verify-rbac.sh*
+
+```bash
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SETTINGS_FILE="$SCRIPT_DIR/cluster-settings.yaml"
+MANIFESTS_DIR="$SCRIPT_DIR/manifests"
+OUTPUT_DIR="$SCRIPT_DIR/../kubeconfigs"
+mkdir -p "$OUTPUT_DIR"
+
+if ! command -v yq &> /dev/null; then
+    echo "❌ Error: 'yq' is required but not installed."
+    exit 1
+fi
+
+CLUSTER_NAME=$(yq eval '.clusterName' "$SETTINGS_FILE")
+
+echo "=================================================="
+echo "🛡️ Applying Static RBAC Manifests & Generating Kubeconfigs"
+echo "=================================================="
+
+# Apply static YAML manifests
+kubectl apply -f "$MANIFESTS_DIR/namespaces-accounts.yaml"
+kubectl apply -f "$MANIFESTS_DIR/rbac-policies.yaml"
+
+# Helper to generate isolated kubeconfig files for each user
+generate_kubeconfig() {
+    local user_name=$1
+    local user_ns=$2
+    local config_out="$OUTPUT_DIR/${user_name}-kubeconfig.yaml"
+
+    echo "🔑 Generating kubeconfig for $user_name..."
+
+    # Create static long-lived token secret for ServiceAccount
+    kubectl apply -f - <<EOF >/dev/null
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${user_name}-token
+  namespace: ${user_ns}
+  annotations:
+    kubernetes.io/service-account.name: "${user_name}"
+type: kubernetes.io/service-account-token
+EOF
+
+    local server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+    local ca_data=$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+
+    local token=""
+    for i in {1..5}; do
+        token=$(kubectl get secret "${user_name}-token" -n "${user_ns}" -o jsonpath='{.data.token}' 2>/dev/null | base64 --decode || true)
+        if [ -n "$token" ]; then break; fi
+        sleep 1
+    done
+
+    cat <<EOF > "$config_out"
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: ${ca_data}
+    server: ${server}
+  name: ${CLUSTER_NAME}
+contexts:
+- context:
+    cluster: ${CLUSTER_NAME}
+    namespace: ${user_ns}
+    user: ${user_name}
+  name: ${user_name}-context
+current-context: ${user_name}-context
+users:
+- name: ${user_name}
+  user:
+    token: ${token}
+EOF
+}
+
+# Generate kubeconfigs for mentor and all 3 students
+generate_kubeconfig "mentor" "mentor-system"
+generate_kubeconfig "student01" "student01"
+generate_kubeconfig "student02" "student02"
+generate_kubeconfig "student03" "student03"
+
+echo "✨ RBAC applied and kubeconfigs saved to 'kubeconfigs/'! ✨"hawk@LAPTOP-M41QRI3E:/mnt/d/study/k8s/kube-in-prod-v2/launch$ cat verify-rbac.sh
+#!/bin/bash
+set -e
+
+echo "=================================================="
+echo "🔍 Verifying RBAC Permissions & Security Isolation"
+echo "=================================================="
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_DIR="$SCRIPT_DIR/../kubeconfigs"
+
+# 1. Mentor RW check in student namespaces
+echo "1️⃣ Testing Mentor RW access in student01..."
+KUBECONFIG="$CONFIG_DIR/mentor-kubeconfig.yaml" kubectl get pods -n student01 &>/dev/null && echo "   ✓ Mentor can read student01"
+
+# 2. Student 01 isolation check
+echo "2️⃣ Testing Student01 isolation..."
+KUBECONFIG="$CONFIG_DIR/student01-kubeconfig.yaml" kubectl get pods -n student01 &>/dev/null && echo "   ✓ Student01 can access own namespace"
+if KUBECONFIG="$CONFIG_DIR/student01-kubeconfig.yaml" kubectl get pods -n student02 &>/dev/null; then
+    echo "   ❌ Breach: Student01 can access student02!"
+    exit 1
+else
+    echo "   ✓ Student01 correctly blocked from student02"
+fi
+
+# 3. Student 02 RO check on student01 (Read should work, Write should fail)
+echo "3️⃣ Testing Student02 Read-Only access on student01..."
+KUBECONFIG="$CONFIG_DIR/student02-kubeconfig.yaml" kubectl get pods -n student01 &>/dev/null && echo "   ✓ Student02 can read student01 (RO working)"
+if KUBECONFIG="$CONFIG_DIR/student02-kubeconfig.yaml" kubectl create deployment student02-hack --image=nginx -n student01 &>/dev/null; then
+    echo "   ❌ Breach: Student02 can write to student01!"
+    kubectl delete deployment student02-hack -n student01 &>/dev/null
+    exit 1
+else
+    echo "   ✓ Student02 correctly blocked from writing to student01"
+fi
+
+echo ""
+echo "✨ All RBAC verification tests passed successfully! ✨"
+```
+
+**./launch/verify-rbac.sh**
+
+Output
+
+```
+==================================================
+🔍 Verifying RBAC Permissions & Security Isolation
+==================================================
+1️⃣ Testing Mentor RW access in student01...
+   ✓ Mentor can read student01
+2️⃣ Testing Student01 isolation...
+   ✓ Student01 can access own namespace
+   ✓ Student01 correctly blocked from student02
+3️⃣ Testing Student02 Read-Only access on student01...
+   ✓ Student02 can read student01 (RO working)
+   ✓ Student02 correctly blocked from writing to student01
+
+✨ All RBAC verification tests passed successfully! ✨
+```
+
+Verify that no cluster admin prviledges in mentor and student0*
+
+*launch/verify-no-cluster-admin.sh*
+
+```bash
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Automatically search for cluster-settings.yaml in common repo locations
+SETTINGS_FILE=""
+POSSIBLE_PATHS=(
+    "$SCRIPT_DIR/cluster-settings.yaml"
+    "$SCRIPT_DIR/../launch/cluster-settings.yaml"
+    "$SCRIPT_DIR/../cluster-settings.yaml"
+    "./cluster-settings.yaml"
+    "./launch/cluster-settings.yaml"
+)
+
+for path in "${POSSIBLE_PATHS[@]}"; do
+    if [ -f "$path" ]; then
+        SETTINGS_FILE="$path"
+        break
+    fi
+done
+
+echo "📁 Using settings file: ${SETTINGS_FILE:-None found (using defaults)}"
+
+CONFIG_DIR="$(dirname "$SETTINGS_FILE")/../kubeconfigs"
+if [ ! -d "$CONFIG_DIR" ]; then
+    CONFIG_DIR="$SCRIPT_DIR/../kubeconfigs"
+fi
+
+if ! command -v yq &> /dev/null; then
+    echo "❌ Error: 'yq' is required but not installed."
+    exit 1
+fi
+
+echo "=================================================="
+echo "🛡️ Security Check: Verifying NO Cluster Admin Privileges"
+echo "=================================================="
+
+# Extract names via yq with robust fallbacks if keys are missing
+MENTOR_NAME=""
+STUDENT_NAMES=""
+
+if [ -f "$SETTINGS_FILE" ]; then
+    MENTOR_NAME=$(yq eval '.mentor.name // ""' "$SETTINGS_FILE" -r 2>/dev/null || true)
+    STUDENT_NAMES=$(yq eval '.students[].name // ""' "$SETTINGS_FILE" -r 2>/dev/null || true)
+fi
+
+# Fallback to standard names if yaml parsing returned nothing
+[ -z "$MENTOR_NAME" ] || [ "$MENTOR_NAME" = "null" ] && MENTOR_NAME="mentor"
+[ -z "$STUDENT_NAMES" ] || [ "$STUDENT_NAMES" = "null" ] && STUDENT_NAMES="student01 student02 student03"
+
+ALL_USERS="$MENTOR_NAME $STUDENT_NAMES"
+
+for user in $ALL_USERS; do
+    [ -z "$user" ] || [ "$user" = "null" ] && continue
+    config_file="$CONFIG_DIR/${user}-kubeconfig.yaml"
+
+    echo "--------------------------------------------------"
+    echo "🔍 Checking user: '$user'"
+
+    if [ ! -f "$config_file" ]; then
+        echo "❌ Error: Kubeconfig not found at '$config_file'."
+        exit 1
+    fi
+
+    # Test 1: Check wildcard cluster-wide actions (* on *)
+    if KUBECONFIG="$config_file" kubectl auth can-i '*' '*' --all-namespaces 2>/dev/null | grep -q "yes"; then
+        echo "   ❌ SECURITY BREACH: '$user' has cluster-admin wildcard permissions (*/*)!"
+        exit 1
+    else
+        echo "   ✓ Passed: '$user' does NOT have wildcard root privileges."
+    fi
+
+    # Test 2: Check cluster node listing
+    if KUBECONFIG="$config_file" kubectl get nodes &>/dev/null; then
+        echo "   ❌ SECURITY BREACH: '$user' has permission to list cluster nodes!"
+        exit 1
+    else
+        echo "   ✓ Passed: '$user' cannot access cluster-scoped nodes."
+    fi
+
+    # Test 3: Check ClusterRoles viewing
+    if KUBECONFIG="$config_file" kubectl get clusterroles &>/dev/null; then
+        echo "   ❌ SECURITY BREACH: '$user' can view cluster-roles!"
+        exit 1
+    else
+        echo "   ✓ Passed: '$user' cannot view cluster-scoped roles."
+    fi
+done
+
+echo ""
+echo "=================================================="
+echo "✨ SUCCESS: Neither mentor nor any student has Cluster Admin privileges! ✨"
+echo "=================================================="
+```
+
+Run
+**./launch/verify-no-cluster-admin.sh**
+
+Output
+
+```
+📁 Using settings file: /mnt/d/study/k8s/kube-in-prod-v2/launch/cluster-settings.yaml
+==================================================
+🛡️ Security Check: Verifying NO Cluster Admin Privileges
+==================================================
+--------------------------------------------------
+🔍 Checking user: 'mentor'
+   ✓ Passed: 'mentor' does NOT have wildcard root privileges.
+   ✓ Passed: 'mentor' cannot access cluster-scoped nodes.
+   ✓ Passed: 'mentor' cannot view cluster-scoped roles.
+--------------------------------------------------
+🔍 Checking user: 'student01'
+   ✓ Passed: 'student01' does NOT have wildcard root privileges.
+   ✓ Passed: 'student01' cannot access cluster-scoped nodes.
+   ✓ Passed: 'student01' cannot view cluster-scoped roles.
+--------------------------------------------------
+🔍 Checking user: 'student02'
+   ✓ Passed: 'student02' does NOT have wildcard root privileges.
+   ✓ Passed: 'student02' cannot access cluster-scoped nodes.
+   ✓ Passed: 'student02' cannot view cluster-scoped roles.
+--------------------------------------------------
+🔍 Checking user: 'student03'
+   ✓ Passed: 'student03' does NOT have wildcard root privileges.
+   ✓ Passed: 'student03' cannot access cluster-scoped nodes.
+   ✓ Passed: 'student03' cannot view cluster-scoped roles.
+
+==================================================
+✨ SUCCESS: Neither mentor nor any student has Cluster Admin privileges! ✨
+==================================================
+```
+
+
 ## 2. Kyverno policy creation for ro
 
 ## 3. Kyverno policy creation 
