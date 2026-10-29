@@ -213,6 +213,77 @@ echo ""
 echo "✨ Verification Complete: Cluster is healthy and accessible! ✨"
 ```
 
+Launch scripts to:
+
+Create cluster
+
+**./launch/create-cluster.sh**
+
+
+Output:
+
+```
+/mnt/d/study/k8s/kube-in-prod-v2/launch
+==================================================
+🚀 Creating KIND Cluster: 'my-cluster-v1'
+==================================================
+⏳ Provisioning cluster...
+Creating cluster "my-cluster-v1" ...
+ ✓ Ensuring node image (kindest/node:v1.37.0) 🖼️
+ ✓ Preparing nodes 📦 📦 📦 📦
+ ✓ Writing configuration 📜
+ ✓ Starting control-plane 🕹️
+ ✓ Installing CNI 🔌
+ ✓ Installing StorageClass 💾
+ ✓ Joining worker nodes 🚜
+Set kubectl context to "kind-my-cluster-v1"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-my-cluster-v1
+
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+⏳ Waiting for nodes to become ready (timeout: 90s)...
+node/my-cluster-v1-control-plane condition met
+node/my-cluster-v1-worker condition met
+node/my-cluster-v1-worker2 condition met
+node/my-cluster-v1-worker3 condition met
+🏷️ Applying Prometheus monitoring labels to worker nodes...
+node/my-cluster-v1-worker labeled
+node/my-cluster-v1-worker2 labeled
+node/my-cluster-v1-worker3 labeled
+
+✨ SUCCESS: Cluster 'my-cluster-v1' is ready! ✨
+```
+
+Verify cluster:
+
+**./launch/verify-cluster.sh**
+
+Output:
+
+```
+==================================================
+🔍 Verifying KIND Cluster: 'my-cluster-v1'
+==================================================
+✓ Kind cluster status: Running
+
+--- Kubernetes Nodes & Status ---
+NAME                          STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION                              CONTAINER-RUNTIME    LABELS
+my-cluster-v1-control-plane   Ready    control-plane   32s   v1.37.0   172.19.0.2    <none>        Debian GNU/Linux 13 (trixie)   6.18.54.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=my-cluster-v1-control-plane,kubernetes.io/os=linux,node-role.kubernetes.io/control-plane=,node.kubernetes.io/exclude-from-external-load-balancers=
+my-cluster-v1-worker          Ready    <none>          21s   v1.37.0   172.19.0.4    <none>        Debian GNU/Linux 13 (trixie)   6.18.54.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=my-cluster-v1-worker,kubernetes.io/os=linux,node-group=workers
+my-cluster-v1-worker2         Ready    <none>          21s   v1.37.0   172.19.0.5    <none>        Debian GNU/Linux 13 (trixie)   6.18.54.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=my-cluster-v1-worker2,kubernetes.io/os=linux,node-group=workers
+my-cluster-v1-worker3         Ready    <none>          21s   v1.37.0   172.19.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.18.54.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.4   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=my-cluster-v1-worker3,kubernetes.io/os=linux,node-group=workers
+
+--- Docker Container & Port Mapping Check ---
+NAMES                         STATUS          PORTS
+my-cluster-v1-worker2         Up 37 seconds
+my-cluster-v1-control-plane   Up 37 seconds   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp, 0.0.0.0:9090->9090/tcp, 0.0.0.0:30000->30000/tcp, 127.0.0.1:46649->6443/tcp
+my-cluster-v1-worker3         Up 37 seconds
+my-cluster-v1-worker          Up 37 seconds
+
+✨ Verification Complete: Cluster is healthy and accessible! ✨
+```
+
 ## 2. Kyverno policy creation for ro
 
 ## 3. Kyverno policy creation 
