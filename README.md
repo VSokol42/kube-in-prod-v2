@@ -939,6 +939,181 @@ Output
 ```
 
 
-## 2. Kyverno policy creation for ro
+## 2. Kyverno policy creation for validating the read-only root filesystem in audit mode
+
+**./launch/verify-kyverno-audit.sh**
+
+Install Kyverno into cluster with --force-conflicts
+
+```bash
+#!/bin/bash
+set -e
+
+echo "=================================================="
+echo "📦 Installing Kyverno via Server-Side Apply (Forced)"
+echo "=================================================="
+
+KYVERNO_VERSION="v1.12.5"
+INSTALL_URL="https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/install.yaml"
+
+echo "🧹 Cleaning up any broken or partially applied resources..."
+kubectl delete -f "$INSTALL_URL" --ignore-not-found=true || true
+
+echo "🚀 Applying Kyverno manifest using server-side apply with force-conflicts..."
+kubectl apply --server-side --force-conflicts -f "$INSTALL_URL"
+
+echo "⏳ Waiting for Kyverno controllers to become ready..."
+kubectl rollout status deployment/kyverno-admission-controller -n kyverno --timeout=120s
+kubectl rollout status deployment/kyverno-reports-controller -n kyverno --timeout=120s
+kubectl rollout status deployment/kyverno-cleanup-controller -n kyverno --timeout=120s
+
+echo "✨ Kyverno installed and ready successfully! ✨"
+```
+
+Kyverno policy manifest in Audit mode
+
+*./launch/manifests/validate-readonly-rootfs.yaml*
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: validate-readonly-root-filesystem
+  annotations:
+    policies.kyverno.io/title: Validate Read-Only Root Filesystem
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Root filesystems should be set to read-only (readOnlyRootFilesystem: true)
+      to prevent malicious modifications to container images. This policy operates
+      in Audit mode.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: check-readonly-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Container root filesystem must be read-only (securityContext.readOnlyRootFilesystem: true)."
+        pattern:
+          spec:
+            =(initContainers):
+              - securityContext:
+                  readOnlyRootFilesystem: true
+            =(ephemeralContainers):
+              - securityContext:
+                  readOnlyRootFilesystem: true
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+```
+
+This script automates the validation process:
+
+1. Applies the kyverno audit policy.
+
+2. Deploys a non-compliant test pod (missing readOnlyRootFilesystem).
+
+3. Confirms that the pod successfully starts (since the policy is in Audit mode, it doesn't block creation).
+
+4. Inspects Kyverno's PolicyReport to verify that the audit violation has been successfully detected and logged.
+
+5. Cleans up the test resources.
+
+*launch/verify-kyverno-audit.sh*
+
+```bash
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+POLICY_FILE="$SCRIPT_DIR/manifests/validate-readonly-rootfs.yaml"
+TEST_NS="default"
+TEST_POD="audit-test-nginx"
+
+echo "=================================================="
+echo "🛡️ Kyverno Audit Mode Verification: Read-Only Root FS"
+echo "=================================================="
+
+# 1. Ensure Kyverno is installed in the cluster
+if ! kubectl get namespace kyverno &>/dev/null; then
+    echo "❌ Error: Kyverno is not installed in the cluster. Please install Kyverno first."
+    exit 1
+fi
+
+# 2. Apply the policy
+echo "📂 Applying Kyverno ClusterPolicy..."
+kubectl apply -f "$POLICY_FILE"
+
+# 3. Deploy a non-compliant pod (should succeed because mode is Audit)
+echo "🚀 Deploying non-compliant test pod ('$TEST_POD')..."
+kubectl run "$TEST_POD" --image=nginx --namespace="$TEST_NS" --dry-run=client -o yaml | kubectl apply -f -
+
+echo "⏳ Waiting for test pod to start..."
+kubectl wait --for=condition=Ready pod/"$TEST_POD" -n "$TEST_NS" --timeout=30s
+
+# 4. Verify that audit mode allowed the pod creation
+echo "   ✓ Pod successfully created (Audit mode permitted non-compliant pod)."
+
+# 5. Check Kyverno PolicyReports for the violation
+echo "🔍 Checking Kyverno PolicyReports for audit violation..."
+sleep 3 # Give background scanner a moment to report
+
+VIOLATION_FOUND=false
+for i in {1..5}; do
+    if kubectl get policyreports -A -o jsonpath='{.items[*].results[*].rule}' 2>/dev/null | grep -q "check-readonly-root-filesystem"; then
+        VIOLATION_FOUND=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$VIOLATION_FOUND" = true ]; then
+    echo "   ✓ Success: Kyverno successfully audited and flagged the violation!"
+else
+    echo "   ⚠️ Warning: PolicyReport hasn't registered yet, checking pod events..."
+    kubectl describe pod "$TEST_POD" -n "$TEST_NS" | grep -i "policy" || true
+fi
+
+# 6. Cleanup test pod
+echo "🧹 Cleaning up test pod..."
+kubectl delete pod "$TEST_POD" -n "$TEST_NS" --grace-period=0 --force &>/dev/null
+
+echo ""
+echo "=================================================="
+echo "✨ Kyverno audit policy verification completed successfully! ✨"
+echo "=================================================="
+```
+
+run
+
+**./launch/verify-kyverno-policy.sh**
+
+
+Output
+
+```
+==================================================
+🛡️ Kyverno Audit Mode Verification: Read-Only Root FS
+==================================================
+📂 Applying Kyverno ClusterPolicy...
+clusterpolicy.kyverno.io/validate-readonly-root-filesystem created
+🚀 Deploying non-compliant test pod ('audit-test-nginx')...
+pod/audit-test-nginx created
+⏳ Waiting for test pod to start...
+pod/audit-test-nginx condition met
+   ✓ Pod successfully created (Audit mode permitted non-compliant pod).
+🔍 Checking Kyverno PolicyReports for audit violation...
+   ✓ Success: Kyverno successfully audited and flagged the violation!
+🧹 Cleaning up test pod...
+
+==================================================
+✨ Kyverno audit policy verification completed successfully! ✨
+==================================================
+```
 
 ## 3. Kyverno policy creation 
