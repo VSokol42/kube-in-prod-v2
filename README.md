@@ -1319,7 +1319,7 @@ kube-in-prod-v1/
 
 Automate the installation of Flux components into the cluster and connects them to repository kube-in-prod-v1 and branch module3
 
-/launch/bootstrap-flux.sh
+*/launch/bootstrap-flux.sh*
 
 ```bash
 #!/bin/bash
@@ -1356,6 +1356,8 @@ flux check
 ```
 
 run it
+
+**./launch/bootstrap-flux.sh**
 
 output
 
@@ -1435,11 +1437,9 @@ Path:       clusters/my-cluster-v1
 ==================================================
 ```
 
-./launch/bootstrap-flux.sh
-
 Create the Flux sync manifests
 
-clusters/my-cluster-v1/apps-kustomization.yaml
+*clusters/my-cluster-v1/apps-kustomization.yaml*
 
 ```yaml
 apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -1461,7 +1461,7 @@ spec:
 
 Verify that flux install correctly.
 
-./test/verify-flux.sh
+**./test/verify-flux.sh**
 
 ```bash
 #!/bin/bash
@@ -1589,5 +1589,289 @@ ouput
 
 ==================================================
 ✨ SUCCESS: Flux CD is installed and healthy! ✨
+==================================================
+```
+
+## 2. Rewrite kyverno policies wit using helm charts.
+
+Create helm chart structures and files:
+
+Create dirs chart/kyverno-policies/templates
+
+*charts/kyverno-policies/Chart.yaml*
+
+```yaml
+apiVersion: v2
+name: kyverno-policies
+description: Custom Kyverno validation and mutation policies for multi-tenant cluster
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+```
+
+*charts/kyverno-policies/values.yaml*
+
+```yaml
+# Global policy configuration options
+validationFailureAction: Audit
+studentNamespaceSelector: "student*"
+mentorNamespace: "mentor-system"
+```
+
+*charts/kyverno-policies/templates/validate-readonly-rootfs.yaml*
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: validate-readonly-root-filesystem
+  annotations:
+    policies.kyverno.io/title: Validate Read-Only Root Filesystem
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Root filesystems should be set to read-only (readOnlyRootFilesystem: true)
+      to prevent malicious modifications to container images.
+spec:
+  validationFailureAction: {{ .Values.validationFailureAction | default "Audit" }}
+  background: true
+  rules:
+    - name: check-readonly-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Container root filesystem must be read-only (securityContext.readOnlyRootFilesystem: true)."
+        pattern:
+          spec:
+            =(initContainers):
+              - securityContext:
+                  readOnlyRootFilesystem: true
+            =(ephemeralContainers):
+              - securityContext:
+                  readOnlyRootFilesystem: true
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+```
+
+*charts/kyverno-policies/templates/mutate-person-label.yaml*
+
+```yaml
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mutate-person-label
+  annotations:
+    policies.kyverno.io/title: Mutate Person Label by Namespace
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Adds the 'person' label to pods depending on their namespace.
+spec:
+  rules:
+    - name: add-student-person-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "{{ .Values.studentNamespaceSelector }}"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              person: student
+
+    - name: add-mentor-person-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "{{ .Values.mentorNamespace }}"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              person: mentor
+```
+
+Configuring Flux to deploy the chart. Instead of deploying raw files, Flux will install the local chart using a HelmRelease resource pointing back to the repository itself.
+
+*clusters/my-cluster-v1/kyverno-policies-release.yaml*
+
+```yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kyverno-policies
+  namespace: flux-system
+spec:
+  interval: 10m
+  targetNamespace: kyverno
+  chart:
+    spec:
+      chart: ./charts/kyverno-policies
+      sourceRef:
+        kind: GitRepository
+        name: flux-system
+        namespace: flux-system
+      interval: 1m
+  values:
+    validationFailureAction: Audit
+    studentNamespaceSelector: "student*"
+    mentorNamespace: "mentor-system"
+```
+
+Deployment Script (*launch/deploy-policies-helm.sh*). It installs or upgrades the policies using Helm.
+
+```bash
+#!/bin/bash
+set -e
+
+CHART_PATH="./charts/kyverno-policies"
+RELEASE_NAME="kyverno-policies"
+
+echo "=================================================="
+echo "📦 Deploying Kyverno Policies via Helm Chart"
+echo "=================================================="
+
+if ! command -v helm &> /dev/null; then
+    echo "❌ Error: Helm CLI is required but not installed."
+    exit 1
+fi
+
+if [ ! -d "$CHART_PATH" ]; then
+    echo "❌ Error: Chart directory not found at '$CHART_PATH'."
+    exit 1
+fi
+
+echo "🚀 Installing/Upgrading Helm release '$RELEASE_NAME'..."
+helm upgrade --install "$RELEASE_NAME" "$CHART_PATH" --namespace kyverno
+
+echo "✨ Kyverno policies Helm chart deployed successfully! ✨"
+```
+
+Before install policies need remove old unmanaged cluster policies
+
+**kubectl delete clusterpolicy mutate-person-label validate-readonly-root-filesystem --ignore-not-found=truex**
+
+After run
+
+**./launch/deploy-policies.sh**
+
+output
+
+```
+==================================================
+📦 Deploying Kyverno Policies via Helm Chart
+==================================================
+🚀 Installing/Upgrading Helm release 'kyverno-policies'...
+Release "kyverno-policies" does not exist. Installing it now.
+NAME: kyverno-policies
+LAST DEPLOYED: Sun Nov  1 21:14:13 2026
+NAMESPACE: kyverno
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+✨ Kyverno policies Helm chart deployed successfully! ✨
+```
+
+Verify by script */test/verify-kiverno-policies.sh*
+
+
+```bash
+#!/bin/bash
+set -e
+
+RELEASE_NAME="kyverno-policies"
+
+echo "=================================================="
+echo "🔍 Verifying Kyverno Helm Policies"
+echo "=================================================="
+
+# 1. Verify Helm Release Status
+if helm status "$RELEASE_NAME" -n kyverno &>/dev/null; then
+    echo "   ✓ Helm release '$RELEASE_NAME' is installed and active."
+else
+    echo "   ❌ Error: Helm release '$RELEASE_NAME' is not found in namespace 'kyverno'."
+    exit 1
+fi
+
+# 2. Test Mutation Policy ('person' label)
+echo "--------------------------------------------------"
+echo "1️⃣ Testing Mutation Policy ('person' label)..."
+
+# Student namespace test
+kubectl run test-pod-student --image=nginx -n student01 --restart=Never --dry-run=client -o yaml | kubectl apply -f -
+LABEL_STUDENT=$(kubectl get pod test-pod-student -n student01 -o jsonpath='{.metadata.labels.person}' 2>/dev/null || echo "")
+if [ "$LABEL_STUDENT" = "student" ]; then
+    echo "   ✓ Success: Student pod correctly received 'person=student'."
+else
+    echo "   ❌ Failure: Expected 'person=student', got '$LABEL_STUDENT'."
+    exit 1
+fi
+kubectl delete pod test-pod-student -n student01 --grace-period=0 --force &>/dev/null
+
+# Mentor namespace test
+kubectl run test-pod-mentor --image=nginx -n mentor-system --restart=Never --dry-run=client -o yaml | kubectl apply -f -
+LABEL_MENTOR=$(kubectl get pod test-pod-mentor -n mentor-system -o jsonpath='{.metadata.labels.person}' 2>/dev/null || echo "")
+if [ "$LABEL_MENTOR" = "mentor" ]; then
+    echo "   ✓ Success: Mentor pod correctly received 'person=mentor'."
+else
+    echo "   ❌ Failure: Expected 'person=mentor', got '$LABEL_MENTOR'."
+    exit 1
+fi
+kubectl delete pod test-pod-mentor -n mentor-system --grace-period=0 --force &>/dev/null
+
+
+# 3. Test Audit Policy (Read-Only Root Filesystem)
+echo "--------------------------------------------------"
+echo "2️⃣ Testing Audit Policy (Read-Only Root Filesystem)..."
+
+TEST_POD="audit-test-nginx"
+kubectl run "$TEST_POD" --image=nginx --namespace="default" --dry-run=client -o yaml | kubectl apply -f -
+
+echo "⏳ Waiting for non-compliant audit test pod to start..."
+kubectl wait --for=condition=Ready pod/"$TEST_POD" -n "default" --timeout=30s
+echo "   ✓ Audit mode successfully allowed non-compliant pod to run."
+
+# Cleanup test pod
+kubectl delete pod "$TEST_POD" -n "default" --grace-period=0 --force &>/dev/null
+
+echo ""
+echo "=================================================="
+echo "✨ SUCCESS: All Helm-managed Kyverno policies verified! ✨"
+echo "=================================================="
+```
+
+Run **./tests/verify-policies-helm.sh**
+
+Output
+
+```
+==================================================
+🔍 Verifying Kyverno Helm Policies
+==================================================
+   ✓ Helm release 'kyverno-policies' is installed and active.
+--------------------------------------------------
+1️⃣ Testing Mutation Policy ('person' label)...
+pod/test-pod-student created
+   ✓ Success: Student pod correctly received 'person=student'.
+pod/test-pod-mentor created
+   ✓ Success: Mentor pod correctly received 'person=mentor'.
+--------------------------------------------------
+2️⃣ Testing Audit Policy (Read-Only Root Filesystem)...
+pod/audit-test-nginx created
+⏳ Waiting for non-compliant audit test pod to start...
+pod/audit-test-nginx condition met
+   ✓ Audit mode successfully allowed non-compliant pod to run.
+
+==================================================
+✨ SUCCESS: All Helm-managed Kyverno policies verified! ✨
 ==================================================
 ```
