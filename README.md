@@ -1292,6 +1292,9 @@ pod/test-pod-default created
 
 # Solution for module 3
 
+<details>
+    <summary> </summary>
+
 ## 1. Select GitOps and setuo it.
 
 Use Flux. Install and validate.
@@ -1329,7 +1332,7 @@ SETTINGS_FILE="./infrastructure/cluster-settings.yaml"
 
 CLUSTER_NAME=$(yq eval '.clusterName // "multi-node-cluster"' "$SETTINGS_FILE" -r)
 GITHUB_OWNER="VSokol42"
-GITHUB_REPO="kube-in-prod-v1"
+GITHUB_REPO="kube-in-prod-v2"
 BRANCH="module3"
 TARGET_PATH="clusters/${CLUSTER_NAME}"
 
@@ -1875,3 +1878,9 @@ pod/audit-test-nginx condition met
 ✨ SUCCESS: All Helm-managed Kyverno policies verified! ✨
 ==================================================
 ```
+
+</details>
+
+# Solution for module 4
+
+Switch flux on branch module4
