@@ -6,8 +6,6 @@ set -e
 SETTINGS_FILE="./infrastructure/cluster-settings.yaml"
 
 
-cat $SETTINGS_FILE
-
 if ! command -v flux &> /dev/null; then
     echo "❌ Error: Flux CLI is not installed. Please install it first (e.g., 'brew install fluxcd/tap/flux' or via curl)."
     exit 1
@@ -26,7 +24,7 @@ fi
 
 CLUSTER_NAME=$(yq eval '.clusterName // "multi-node-cluster"' "$SETTINGS_FILE" -r)
 GITHUB_OWNER="VSokol42"
-GITHUB_REPO="kube-in-prod-v1"
+GITHUB_REPO="kube-in-prod-v2"
 BRANCH="module3"
 TARGET_PATH="clusters/${CLUSTER_NAME}"
 

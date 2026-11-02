@@ -1329,7 +1329,7 @@ SETTINGS_FILE="./infrastructure/cluster-settings.yaml"
 
 CLUSTER_NAME=$(yq eval '.clusterName // "multi-node-cluster"' "$SETTINGS_FILE" -r)
 GITHUB_OWNER="VSokol42"
-GITHUB_REPO="kube-in-prod-v1"
+GITHUB_REPO="kube-in-prod-v2"
 BRANCH="module3"
 TARGET_PATH="clusters/${CLUSTER_NAME}"
 
