@@ -1875,3 +1875,75 @@ pod/audit-test-nginx condition met
 ✨ SUCCESS: All Helm-managed Kyverno policies verified! ✨
 ==================================================
 ```
+
+
+# Module 05 – Observability & Troubleshooting
+
+## 1. Add a monitoring system (Prometheus+Grafana) to the cluster.
+
+
+Create manifest *infrastructure/prometheus-values.yaml*
+
+```yaml
+grafana:
+  service:
+    type: NodePort
+    nodePort: 30000
+
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false
+
+admissionWebhooks:
+  enabled: false
+
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+```
+
+Create namespace - monitoring and install monitoring stack by helm
+
+```bash
+kubectl create namespace monitoring
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --values infrastructure/prometheus-values.yaml
+```
+
+Output
+
+```
+NAME: monitoring
+LAST DEPLOYED: Tue Nov  3 05:15:58 2026
+NAMESPACE: monitoring
+STATUS: deployed
+REVISION: 1
+NOTES:
+kube-prometheus-stack has been installed. Check its status by running:
+  kubectl --namespace monitoring get pods -l "release=monitoring"
+
+Get Grafana 'admin' user password by running:
+
+  kubectl --namespace monitoring get secrets monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+
+Access Grafana local instance:
+
+  export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=monitoring" -oname)
+  kubectl --namespace monitoring port-forward $POD_NAME 3000
+
+Get your grafana admin user password by running:
+
+  kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
+
+
+Visit https://github.com/prometheus-operator/kube-prometheus for instructions on how to create & configure Alertmanager and Prometheus instances using the Operator.
+```
+
+Navigate in browser url http://127.0.0.1:3000
+
+Creds - admin, `kubectl get secret ...`
