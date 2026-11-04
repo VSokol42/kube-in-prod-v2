@@ -1849,7 +1849,7 @@ echo "✨ SUCCESS: All Helm-managed Kyverno policies verified! ✨"
 echo "=================================================="
 ```
 
-Run **./tests/verify-policies-helm.sh**
+Run **./tests/verify-policies.sh**
 
 Output
 
