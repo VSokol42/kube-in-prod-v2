@@ -1,0 +1,4 @@
+# Global policy configuration options
+validationFailureAction: Audit
+studentNamespaceSelector: "student*"
+mentorNamespace: "mentor-system"

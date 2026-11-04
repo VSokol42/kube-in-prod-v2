@@ -1,0 +1,39 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mutate-person-label
+  annotations:
+    policies.kyverno.io/title: Mutate Person Label by Namespace
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Adds the 'person' label to pods depending on their namespace ('student' for 
+      student namespaces, 'mentor' for mentor namespaces). Other namespaces are ignored.
+spec:
+  rules:
+    - name: add-student-person-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "student*"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              person: student
+
+    - name: add-mentor-person-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - "mentor-system"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              person: mentor
